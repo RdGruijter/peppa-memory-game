@@ -1,7 +1,9 @@
-# v1.2.0 — difficulty levels added
 import streamlit as st
 import random
 import time
+import json
+import os
+from datetime import datetime
 
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
@@ -11,6 +13,29 @@ st.set_page_config(
 )
 
 # ── Leaderboard file ──────────────────────────────────────────────────────────
+SCORES_FILE = "peppa_scores.json"
+
+def load_scores():
+    if os.path.exists(SCORES_FILE):
+        with open(SCORES_FILE, "r") as f:
+            return json.load(f)
+    return []
+
+def save_score(name, difficulty, mode, moves, pairs, date):
+    scores = load_scores()
+    scores.append({
+        "name": name,
+        "difficulty": difficulty,
+        "mode": mode,
+        "moves": moves,
+        "pairs": pairs,
+        "date": date,
+    })
+    # Keep best 50 scores
+    scores = sorted(scores, key=lambda x: (x["difficulty"] != "Hard", x["difficulty"] != "Medium", x["moves"]))
+    scores = scores[:50]
+    with open(SCORES_FILE, "w") as f:
+        json.dump(scores, f)
 
 # ── Styling ───────────────────────────────────────────────────────────────────
 st.markdown("""
