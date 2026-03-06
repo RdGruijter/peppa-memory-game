@@ -3,6 +3,7 @@ __pycache__/
 .env
 .streamlit/secrets.toml
 peppa_scores.json
+peppa_scores.json.tmp
 *.egg-info/
 dist/
 build/

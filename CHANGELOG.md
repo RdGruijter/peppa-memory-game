@@ -46,3 +46,14 @@ All notable changes to Peppa's Memory Game are documented here.
 - Cards flip back automatically on a mismatch
 - 🎉 Win screen with balloons
 - Pink Peppa-style theme with Baloo 2 font
+
+---
+
+## [1.4.0] - 2026-03-06
+### Added
+- 🔒 Input sanitization — name field strips dangerous characters via regex, enforces max length
+- 🚦 Rate limiting — each browser session can save at most 3 scores (configurable via env var)
+- 🌍 Environment variables — all config loaded from `.env` via `python-dotenv` (see `.env.example`)
+- 🔐 Secure score storage — leaderboard file signed with HMAC-SHA256; tampered files are rejected
+- Atomic file writes via temp file + `os.replace()` to prevent corruption
+- Schema validation on score load — malformed entries silently dropped
