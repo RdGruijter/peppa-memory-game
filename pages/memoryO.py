@@ -56,6 +56,7 @@ def _to_base64(path: Path) -> str:
     return f"data:image/{mime};base64,{data}"
 
 def load_sprites() -> list:
+    """Scan assets/ map en laad alle afbeeldingen als sprite-dicts."""
     if not ASSETS_DIR.exists():
         return []
     sprites = []
@@ -71,11 +72,14 @@ def load_sprites() -> list:
         })
     return sprites
 
-SPRITES     = load_sprites()
+# Laad sprites eenmalig
+SPRITES    = load_sprites()
 USE_SPRITES = len(SPRITES) >= 2
-ALL_EMOJIS  = ["🐷","🌈","🌟","🦋","🍭","🐸","🎀","🌸","🎠","🦄","🍀","🎪"]
+
+ALL_EMOJIS = ["🐷","🌈","🌟","🦋","🍭","🐸","🎀","🌸","🎠","🦄","🍀","🎪"]
 
 def render_card_face(card, size_px: int = 80) -> str:
+    """Geeft HTML terug voor de voorkant van een kaartje."""
     if isinstance(card, dict) and card.get("b64"):
         return (
             f'<img src="{card["b64"]}" '
@@ -86,7 +90,7 @@ def render_card_face(card, size_px: int = 80) -> str:
     return str(card) if not isinstance(card, dict) else card.get("emoji", "⭐")
 
 # ════════════════════════════════════════════════════════════════════════════════
-# INPUT SANITIZATION
+# 1. INPUT SANITIZATION
 # ════════════════════════════════════════════════════════════════════════════════
 
 _NAME_PATTERN = re.compile(r"[^\w\s\-\'\.\!\?éèêëàâùûüôîïç]", re.UNICODE)
@@ -99,8 +103,9 @@ def sanitize_name(raw: str) -> str:
     name = name[:_MAX_NAME_LEN]
     return name or "Anonymous 🐷"
 
+
 # ════════════════════════════════════════════════════════════════════════════════
-# SECURE SCORE STORAGE
+# 2. SECURE SCORE STORAGE
 # ════════════════════════════════════════════════════════════════════════════════
 
 def _sign(payload: str) -> str:
@@ -150,8 +155,9 @@ def save_score(name: str, difficulty: str, mode: str, moves: int, pairs: int, da
         json.dump(data, f, ensure_ascii=False, indent=2)
     os.replace(tmp, SCORES_FILE)
 
+
 # ════════════════════════════════════════════════════════════════════════════════
-# RATE LIMITING
+# 3. RATE LIMITING
 # ════════════════════════════════════════════════════════════════════════════════
 
 def _can_save_score() -> bool:
@@ -160,10 +166,11 @@ def _can_save_score() -> bool:
 def _record_save():
     st.session_state["saves_this_session"] = st.session_state.get("saves_this_session", 0) + 1
 
+
 # ════════════════════════════════════════════════════════════════════════════════
-# STYLING + MOBIEL MELDING
+# STYLING
 # ════════════════════════════════════════════════════════════════════════════════
-st.html("""
+st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;700;800&display=swap');
 html, body, [class*="css"] { font-family: 'Baloo 2', cursive; background-color: #fff0f5; }
@@ -178,35 +185,6 @@ div.stButton > button {
 div.stButton > button:hover { transform:scale(1.05); box-shadow:0 6px 18px rgba(233,30,140,0.25); border-color:#e91e8c; }
 div.stButton > button:active { transform:scale(0.96); }
 
-/* ── Mobiel vs Desktop ── */
-.mobile-msg   { display: none;  }
-.desktop-only { display: block; }
-
-@media (max-width: 768px) {
-    .mobile-msg   { display: flex !important; }
-    .desktop-only { display: none !important; }
-    /* Verberg ook alle Streamlit widgets op mobiel */
-    [data-testid="stVerticalBlock"] > div { display: none !important; }
-    .mobile-msg { display: flex !important; }
-}
-
-/* ── Mobiel melding ── */
-.mobile-msg {
-    position: fixed; inset: 0;
-    background: linear-gradient(180deg, #87CEEB 0%, #B0E0FF 60%, #C8EFA0 85%, #7EC850 100%);
-    flex-direction: column; align-items: center; justify-content: center;
-    text-align: center; padding: 32px; z-index: 9999;
-}
-.mobile-msg-box {
-    background: rgba(255,255,255,0.92); border-radius: 28px;
-    padding: 36px 28px; border: 4px solid #FF6B9D;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.12); max-width: 320px;
-}
-.mobile-msg-icon  { font-size: 4rem; margin-bottom: 12px; }
-.mobile-msg-title { font-family: 'Baloo 2', cursive; font-size: 1.6rem; color: #C2185B; margin-bottom: 10px; font-weight: 800; }
-.mobile-msg-text  { font-size: 0.95rem; color: #be185d; line-height: 1.6; font-weight: 700; }
-.mobile-msg-emoji { font-size: 2rem; margin-top: 16px; }
-
 .card-easy   { width:110px; height:110px; font-size:2.8rem; }
 .card-medium { width: 90px; height: 90px; font-size:2.2rem; }
 .card-hard   { width: 75px; height: 75px; font-size:1.8rem; }
@@ -214,6 +192,7 @@ div.stButton > button:active { transform:scale(0.96); }
 .matched-p1 { border:3px solid #86efac; background:linear-gradient(135deg,#d1fae5,#f0fdf4); box-shadow:0 4px 12px rgba(34,197,94,0.2); }
 .matched-p2 { border:3px solid #93c5fd; background:linear-gradient(135deg,#dbeafe,#eff6ff); box-shadow:0 4px 12px rgba(59,130,246,0.2); }
 .flipped    { border:3px solid #e91e8c; background:linear-gradient(135deg,#fce7f3,#fdf2f8); box-shadow:0 6px 18px rgba(233,30,140,0.3); }
+
 .score-box    { background:linear-gradient(135deg,#fce7f3,#fdf2f8); border:2px solid #f9a8d4; border-radius:20px; padding:10px 16px; text-align:center; margin:6px 2px; color:#be185d; font-weight:700; font-size:1rem; }
 .score-p1     { border:3px solid #e91e8c; background:linear-gradient(135deg,#fce7f3,#fdf2f8); color:#be185d; border-radius:20px; padding:10px 16px; text-align:center; margin:6px 2px; font-weight:700; font-size:1rem; }
 .score-p1-off { border:2px dashed #f9a8d4; background:#fdf2f8; color:#f9a8d4; border-radius:20px; padding:10px 16px; text-align:center; margin:6px 2px; font-weight:700; font-size:1rem; }
@@ -246,20 +225,7 @@ div[data-testid="stTextInput"] input {
     color:#be185d !important; font-size:1.1rem !important; font-weight:700 !important; text-align:center;
 }
 </style>
-
-<!-- Mobiel melding — altijd bovenaan, CSS bepaalt of het zichtbaar is -->
-<div class="mobile-msg">
-    <div class="mobile-msg-box">
-        <div class="mobile-msg-icon">🐷</div>
-        <div class="mobile-msg-title">Peppa's Memory Game</div>
-        <div class="mobile-msg-text">
-            Deze app is gemaakt voor de computer.<br><br>
-            Open de link op je laptop of desktop! 💻
-        </div>
-        <div class="mobile-msg-emoji">🌟 💖 🌈</div>
-    </div>
-</div>
-""")
+""", unsafe_allow_html=True)
 
 # ── Game config ───────────────────────────────────────────────────────────────
 DIFF_CONFIG = {
@@ -274,7 +240,9 @@ def init_game():
     cfg   = DIFF_CONFIG[st.session_state.difficulty]
     n     = cfg["pairs"]
     total = n * 2
+
     if USE_SPRITES:
+        # Herhaal pool als er meer paren nodig zijn dan sprites
         repeats = math.ceil(n / len(SPRITES))
         pool    = (SPRITES * repeats)[:n]
         cards   = pool + pool
@@ -282,6 +250,7 @@ def init_game():
     else:
         cards = ALL_EMOJIS[:n] * 2
         random.shuffle(cards)
+
     st.session_state.update(dict(
         cards=cards, revealed=[False]*total, matched=[False]*total,
         matched_by=[None]*total, flipped=[], moves=0, matches=0,
@@ -317,6 +286,7 @@ def show_leaderboard(highlight_name=None):
         </div>""", unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
+# ── Card flip logic ───────────────────────────────────────────────────────────
 def flip_card(idx):
     if st.session_state.lock or st.session_state.matched[idx] or st.session_state.revealed[idx] or idx in st.session_state.flipped:
         return
@@ -326,11 +296,14 @@ def flip_card(idx):
         st.session_state.moves += 1
         i, j = st.session_state.flipped
         ci, cj = st.session_state.cards[i], st.session_state.cards[j]
+
+        # Vergelijk op naam (sprite-dict) of direct (emoji string)
         match = (
             ci["name"] == cj["name"]
             if isinstance(ci, dict) and isinstance(cj, dict)
             else ci == cj
         )
+
         if match:
             st.session_state.matched[i] = st.session_state.matched[j] = True
             st.session_state.matched_by[i] = st.session_state.matched_by[j] = st.session_state.current_player
@@ -348,11 +321,14 @@ def flip_card(idx):
 if "mode" not in st.session_state:
     st.markdown("# 🐷 Peppa's Memory Game")
     st.markdown('<p class="peppa-sub">Choose how you want to play! 🌟</p>', unsafe_allow_html=True)
+
+    # Toon asset status
     if USE_SPRITES:
         names = ", ".join(s["label"] for s in SPRITES)
         st.markdown(f'<div class="asset-info">🖼️ {len(SPRITES)} sprite{"s" if len(SPRITES)>1 else ""} geladen: {names}</div>', unsafe_allow_html=True)
     else:
-        st.markdown('<div class="asset-info">💡 Geen sprites gevonden in assets/ — emoji modus actief.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="asset-info">💡 Geen sprites gevonden in assets/ — emoji modus actief. Voeg PNG bestanden toe aan de assets/ map!</div>', unsafe_allow_html=True)
+
     st.markdown("<br>", unsafe_allow_html=True)
     col1, col2 = st.columns(2)
     with col1:
@@ -404,6 +380,7 @@ cols    = cfg["cols"]
 n_rows  = total // cols
 cclass  = cfg["card_class"]
 
+# Kaartgrootte per moeilijkheid
 SIZE_MAP = {"Easy": 90, "Medium": 72, "Hard": 58}
 img_size = SIZE_MAP.get(diff, 72)
 
@@ -480,19 +457,26 @@ grid_rows = [st.columns(cols) for _ in range(n_rows)]
 for i in range(total):
     with grid_rows[i // cols][i % cols]:
         card = st.session_state.cards[i]
+
         if st.session_state.matched[i]:
             mcl  = "matched-p2" if st.session_state.matched_by[i] == 2 else "matched-p1"
             face = render_card_face(card, img_size)
-            st.markdown(f'<div class="card-base {cclass} {mcl}">{face}</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="card-base {cclass} {mcl}">{face}</div>',
+                unsafe_allow_html=True,
+            )
         elif st.session_state.revealed[i]:
             face = render_card_face(card, img_size)
-            st.markdown(f'<div class="card-base {cclass} flipped">{face}</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="card-base {cclass} flipped">{face}</div>',
+                unsafe_allow_html=True,
+            )
         else:
             if st.button("🐷", key=f"card_{i}"):
                 flip_card(i)
                 st.rerun()
 
-# ── Unmatched pair — flip back ────────────────────────────────────────────────
+# ── Unmatched pair — flip back, switch player ─────────────────────────────────
 if st.session_state.lock and len(st.session_state.flipped) == 2:
     time.sleep(0.9)
     i, j = st.session_state.flipped
