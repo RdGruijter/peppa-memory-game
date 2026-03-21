@@ -38,7 +38,7 @@ st.set_page_config(
 # ASSET MANAGER
 # ════════════════════════════════════════════════════════════════════════════════
 
-ASSETS_DIR     = Path(__file__).parent / "assets"
+ASSETS_DIR     = Path(__file__).parent.parent / "assets"
 SUPPORTED_EXTS = {".png", ".jpg", ".jpeg"}
 
 EMOJI_FALLBACK = {
