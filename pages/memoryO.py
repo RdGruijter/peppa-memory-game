@@ -56,6 +56,7 @@ def _to_base64(path: Path) -> str:
     return f"data:image/{mime};base64,{data}"
 
 def load_sprites() -> list:
+    """Scan assets/ map en laad alle afbeeldingen als sprite-dicts."""
     if not ASSETS_DIR.exists():
         return []
     sprites = []
@@ -71,11 +72,14 @@ def load_sprites() -> list:
         })
     return sprites
 
-SPRITES     = load_sprites()
+# Laad sprites eenmalig
+SPRITES    = load_sprites()
 USE_SPRITES = len(SPRITES) >= 2
-ALL_EMOJIS  = ["🐷","🌈","🌟","🦋","🍭","🐸","🎀","🌸","🎠","🦄","🍀","🎪"]
+
+ALL_EMOJIS = ["🐷","🌈","🌟","🦋","🍭","🐸","🎀","🌸","🎠","🦄","🍀","🎪"]
 
 def render_card_face(card, size_px: int = 80) -> str:
+    """Geeft HTML terug voor de voorkant van een kaartje."""
     if isinstance(card, dict) and card.get("b64"):
         return (
             f'<img src="{card["b64"]}" '
@@ -86,7 +90,7 @@ def render_card_face(card, size_px: int = 80) -> str:
     return str(card) if not isinstance(card, dict) else card.get("emoji", "⭐")
 
 # ════════════════════════════════════════════════════════════════════════════════
-# INPUT SANITIZATION
+# 1. INPUT SANITIZATION
 # ════════════════════════════════════════════════════════════════════════════════
 
 _NAME_PATTERN = re.compile(r"[^\w\s\-\'\.\!\?éèêëàâùûüôîïç]", re.UNICODE)
@@ -99,8 +103,9 @@ def sanitize_name(raw: str) -> str:
     name = name[:_MAX_NAME_LEN]
     return name or "Anonymous 🐷"
 
+
 # ════════════════════════════════════════════════════════════════════════════════
-# SECURE SCORE STORAGE
+# 2. SECURE SCORE STORAGE
 # ════════════════════════════════════════════════════════════════════════════════
 
 def _sign(payload: str) -> str:
@@ -150,8 +155,9 @@ def save_score(name: str, difficulty: str, mode: str, moves: int, pairs: int, da
         json.dump(data, f, ensure_ascii=False, indent=2)
     os.replace(tmp, SCORES_FILE)
 
+
 # ════════════════════════════════════════════════════════════════════════════════
-# RATE LIMITING
+# 3. RATE LIMITING
 # ════════════════════════════════════════════════════════════════════════════════
 
 def _can_save_score() -> bool:
@@ -160,10 +166,11 @@ def _can_save_score() -> bool:
 def _record_save():
     st.session_state["saves_this_session"] = st.session_state.get("saves_this_session", 0) + 1
 
+
 # ════════════════════════════════════════════════════════════════════════════════
 # STYLING
 # ════════════════════════════════════════════════════════════════════════════════
-st.html("""
+st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;700;800&display=swap');
 html, body, [class*="css"] { font-family: 'Baloo 2', cursive; background-color: #fff0f5; }
@@ -178,43 +185,13 @@ div.stButton > button {
 div.stButton > button:hover { transform:scale(1.05); box-shadow:0 6px 18px rgba(233,30,140,0.25); border-color:#e91e8c; }
 div.stButton > button:active { transform:scale(0.96); }
 
-/* ── Mobiel kaartgrid ── */
-.card-grid {
-    display: grid;
-    gap: 6px;
-    width: 100%;
-    max-width: 600px;
-    margin: 0 auto;
-    padding: 4px;
-}
-/* Easy: 4 kolommen */
-.card-grid-easy   { grid-template-columns: repeat(4, 1fr); }
-/* Medium: 4 kolommen */
-.card-grid-medium { grid-template-columns: repeat(4, 1fr); }
-/* Hard: 6 kolommen */
-.card-grid-hard   { grid-template-columns: repeat(6, 1fr); }
-
-/* Kaart cel — altijd vierkant via aspect-ratio */
-.card-cell {
-    aspect-ratio: 1 / 1;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    overflow: hidden;
-    font-size: clamp(1.2rem, 5vw, 2.4rem);
-}
-.card-cell img {
-    width: 80%;
-    height: 80%;
-    object-fit: contain;
-}
-
+.card-easy   { width:110px; height:110px; font-size:2.8rem; }
+.card-medium { width: 90px; height: 90px; font-size:2.2rem; }
+.card-hard   { width: 75px; height: 75px; font-size:1.8rem; }
+.card-base { border-radius:16px; display:flex; align-items:center; justify-content:center; overflow:hidden; }
 .matched-p1 { border:3px solid #86efac; background:linear-gradient(135deg,#d1fae5,#f0fdf4); box-shadow:0 4px 12px rgba(34,197,94,0.2); }
 .matched-p2 { border:3px solid #93c5fd; background:linear-gradient(135deg,#dbeafe,#eff6ff); box-shadow:0 4px 12px rgba(59,130,246,0.2); }
 .flipped    { border:3px solid #e91e8c; background:linear-gradient(135deg,#fce7f3,#fdf2f8); box-shadow:0 6px 18px rgba(233,30,140,0.3); }
-.card-back  { border:3px solid #f9a8d4; background:linear-gradient(135deg,#ffd6ec,#fff0fa); cursor:pointer; }
-.card-back:hover { transform:scale(1.05); border-color:#e91e8c; }
 
 .score-box    { background:linear-gradient(135deg,#fce7f3,#fdf2f8); border:2px solid #f9a8d4; border-radius:20px; padding:10px 16px; text-align:center; margin:6px 2px; color:#be185d; font-weight:700; font-size:1rem; }
 .score-p1     { border:3px solid #e91e8c; background:linear-gradient(135deg,#fce7f3,#fdf2f8); color:#be185d; border-radius:20px; padding:10px 16px; text-align:center; margin:6px 2px; font-weight:700; font-size:1rem; }
@@ -248,13 +225,13 @@ div[data-testid="stTextInput"] input {
     color:#be185d !important; font-size:1.1rem !important; font-weight:700 !important; text-align:center;
 }
 </style>
-""")
+""", unsafe_allow_html=True)
 
 # ── Game config ───────────────────────────────────────────────────────────────
 DIFF_CONFIG = {
-    "Easy":   {"pairs":4,  "cols":4, "card_class":"card-grid-easy",   "label":"4 pairs · 8 cards",   "emoji":"🌸", "color":"#22c55e"},
-    "Medium": {"pairs":8,  "cols":4, "card_class":"card-grid-medium", "label":"8 pairs · 16 cards",  "emoji":"🌟", "color":"#f59e0b"},
-    "Hard":   {"pairs":12, "cols":6, "card_class":"card-grid-hard",   "label":"12 pairs · 24 cards", "emoji":"🔥", "color":"#ef4444"},
+    "Easy":   {"pairs":4,  "cols":4, "card_class":"card-easy",   "label":"4 pairs · 8 cards",   "emoji":"🌸", "color":"#22c55e"},
+    "Medium": {"pairs":8,  "cols":4, "card_class":"card-medium", "label":"8 pairs · 16 cards",  "emoji":"🌟", "color":"#f59e0b"},
+    "Hard":   {"pairs":12, "cols":6, "card_class":"card-hard",   "label":"12 pairs · 24 cards", "emoji":"🔥", "color":"#ef4444"},
 }
 badge_map = {"Easy":"badge-easy","Medium":"badge-medium","Hard":"badge-hard"}
 
@@ -265,6 +242,7 @@ def init_game():
     total = n * 2
 
     if USE_SPRITES:
+        # Herhaal pool als er meer paren nodig zijn dan sprites
         repeats = math.ceil(n / len(SPRITES))
         pool    = (SPRITES * repeats)[:n]
         cards   = pool + pool
@@ -318,11 +296,14 @@ def flip_card(idx):
         st.session_state.moves += 1
         i, j = st.session_state.flipped
         ci, cj = st.session_state.cards[i], st.session_state.cards[j]
+
+        # Vergelijk op naam (sprite-dict) of direct (emoji string)
         match = (
             ci["name"] == cj["name"]
             if isinstance(ci, dict) and isinstance(cj, dict)
             else ci == cj
         )
+
         if match:
             st.session_state.matched[i] = st.session_state.matched[j] = True
             st.session_state.matched_by[i] = st.session_state.matched_by[j] = st.session_state.current_player
@@ -341,11 +322,12 @@ if "mode" not in st.session_state:
     st.markdown("# 🐷 Peppa's Memory Game")
     st.markdown('<p class="peppa-sub">Choose how you want to play! 🌟</p>', unsafe_allow_html=True)
 
+    # Toon asset status
     if USE_SPRITES:
         names = ", ".join(s["label"] for s in SPRITES)
         st.markdown(f'<div class="asset-info">🖼️ {len(SPRITES)} sprite{"s" if len(SPRITES)>1 else ""} geladen: {names}</div>', unsafe_allow_html=True)
     else:
-        st.markdown('<div class="asset-info">💡 Geen sprites gevonden in assets/ — emoji modus actief.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="asset-info">💡 Geen sprites gevonden in assets/ — emoji modus actief. Voeg PNG bestanden toe aan de assets/ map!</div>', unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     col1, col2 = st.columns(2)
@@ -397,6 +379,10 @@ total   = n_pairs * 2
 cols    = cfg["cols"]
 n_rows  = total // cols
 cclass  = cfg["card_class"]
+
+# Kaartgrootte per moeilijkheid
+SIZE_MAP = {"Easy": 90, "Medium": 72, "Hard": 58}
+img_size = SIZE_MAP.get(diff, 72)
 
 st.markdown("# 🐷 Peppa's Memory Game")
 mode_label = "👤 Single Player" if st.session_state.mode == "single" else "👥 2 Players"
@@ -466,35 +452,31 @@ if st.session_state.matches == n_pairs:
         if st.button("🏠 Main Menu", use_container_width=True): go_home(); st.rerun()
     st.stop()
 
-# ── CSS Grid — bouw HTML voor alle kaarten ────────────────────────────────────
-cards_html = f'<div class="card-grid {cclass}">'
+# ── Grid ──────────────────────────────────────────────────────────────────────
+grid_rows = [st.columns(cols) for _ in range(n_rows)]
 for i in range(total):
-    card = st.session_state.cards[i]
-    if st.session_state.matched[i]:
-        mcl  = "matched-p2" if st.session_state.matched_by[i] == 2 else "matched-p1"
-        face = render_card_face(card)
-        cards_html += f'<div class="card-cell {mcl}">{face}</div>'
-    elif st.session_state.revealed[i]:
-        face = render_card_face(card)
-        cards_html += f'<div class="card-cell flipped">{face}</div>'
-    else:
-        # Achterkant — knop via Streamlit (zie hieronder)
-        cards_html += f'<div class="card-cell card-back" id="card-{i}">🐷</div>'
-cards_html += '</div>'
+    with grid_rows[i // cols][i % cols]:
+        card = st.session_state.cards[i]
 
-st.html(cards_html)
-
-# ── Knoppen voor ongeopende kaarten (onzichtbaar, triggeren flip) ─────────────
-# We renderen de knoppen verborgen via een container en koppelen ze aan het grid
-hidden_cols = st.columns(total)
-for i in range(total):
-    if not st.session_state.matched[i] and not st.session_state.revealed[i]:
-        with hidden_cols[i]:
-            if st.button("🐷", key=f"card_{i}", help=f"Kaart {i+1}"):
+        if st.session_state.matched[i]:
+            mcl  = "matched-p2" if st.session_state.matched_by[i] == 2 else "matched-p1"
+            face = render_card_face(card, img_size)
+            st.markdown(
+                f'<div class="card-base {cclass} {mcl}">{face}</div>',
+                unsafe_allow_html=True,
+            )
+        elif st.session_state.revealed[i]:
+            face = render_card_face(card, img_size)
+            st.markdown(
+                f'<div class="card-base {cclass} flipped">{face}</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            if st.button("🐷", key=f"card_{i}"):
                 flip_card(i)
                 st.rerun()
 
-# ── Unmatched pair — flip back ────────────────────────────────────────────────
+# ── Unmatched pair — flip back, switch player ─────────────────────────────────
 if st.session_state.lock and len(st.session_state.flipped) == 2:
     time.sleep(0.9)
     i, j = st.session_state.flipped
