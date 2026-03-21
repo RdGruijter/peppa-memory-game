@@ -19,10 +19,12 @@ html, body, [class*="css"] {
 [data-testid="stSidebarNav"] { display: none; }
 div[data-testid="stDecoration"] { display: none; }
 
-.main > div {
-    background: linear-gradient(180deg, #87CEEB 0%, #B0E0FF 55%, #C8EFA0 80%, #7EC850 100%);
+[data-testid="stAppViewContainer"] {
+    background: linear-gradient(180deg, #87CEEB 0%, #B0E0FF 55%, #C8EFA0 80%, #7EC850 100%) !important;
     min-height: 100vh;
-    padding: 0 !important;
+}
+[data-testid="stMain"], .main, .main > div {
+    background: transparent !important;
 }
 
 .clouds-wrap {
@@ -94,9 +96,9 @@ div[data-testid="stDecoration"] { display: none; }
 .hub-title {
     font-family: 'Fredoka One', cursive;
     font-size: clamp(2rem, 7vw, 3.4rem);
-    color: white;
+    color: #C2185B;
     text-align: center;
-    text-shadow: 3px 3px 0 #E0447A, 6px 6px 0 rgba(224,68,122,0.25);
+    text-shadow: 2px 2px 0 white, 4px 4px 0 rgba(255,255,255,0.4);
     line-height: 1.1;
     margin-bottom: 4px;
 }

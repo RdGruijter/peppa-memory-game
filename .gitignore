@@ -9,5 +9,4 @@ dist/
 build/
 .DS_Store
 venv/
-assets/
 docs/
