@@ -6,11 +6,13 @@ import os
 import re
 import hmac
 import hashlib
+import math
+import base64
+from pathlib import Path
 from datetime import datetime
 from dotenv import load_dotenv
 
 # ── Environment variables ─────────────────────────────────────────────────────
-# Loads from .env file if present; falls back to OS environment or safe defaults.
 load_dotenv()
 
 SECRET_KEY   = os.getenv("PEPPA_SECRET_KEY", "change-me-to-a-random-secret")
@@ -19,7 +21,6 @@ MAX_SCORES   = int(os.getenv("PEPPA_MAX_SCORES", "50"))
 SCORES_FILE  = os.getenv("PEPPA_SCORES_FILE", "peppa_scores.json")
 
 if SECRET_KEY == "change-me-to-a-random-secret":
-    # Warn the developer — never shown to end users
     import warnings
     warnings.warn(
         "⚠️  PEPPA_SECRET_KEY is not set. Copy .env.example to .env and set a real key.",
@@ -34,41 +35,86 @@ st.set_page_config(
 )
 
 # ════════════════════════════════════════════════════════════════════════════════
+# ASSET MANAGER
+# ════════════════════════════════════════════════════════════════════════════════
+
+ASSETS_DIR     = Path(__file__).parent / "assets"
+SUPPORTED_EXTS = {".png", ".jpg", ".jpeg"}
+
+EMOJI_FALLBACK = {
+    "peppa":   "🐷", "george": "🦕", "mama":    "👩",
+    "papa":    "👨", "suzy":   "🐑", "danny":   "🐶",
+    "rebecca": "🐰", "zoe":    "🦓", "pedro":   "🐴",
+    "emily":   "🐘", "default": "⭐",
+}
+
+def _to_base64(path: Path) -> str:
+    with open(path, "rb") as f:
+        data = base64.b64encode(f.read()).decode("utf-8")
+    ext  = path.suffix.lower().lstrip(".")
+    mime = "jpeg" if ext in ("jpg", "jpeg") else "png"
+    return f"data:image/{mime};base64,{data}"
+
+def load_sprites() -> list:
+    """Scan assets/ map en laad alle afbeeldingen als sprite-dicts."""
+    if not ASSETS_DIR.exists():
+        return []
+    sprites = []
+    for file in sorted(ASSETS_DIR.iterdir()):
+        if file.suffix.lower() not in SUPPORTED_EXTS:
+            continue
+        name = file.stem.lower()
+        sprites.append({
+            "name":  name,
+            "label": name.capitalize(),
+            "emoji": EMOJI_FALLBACK.get(name, EMOJI_FALLBACK["default"]),
+            "b64":   _to_base64(file),
+        })
+    return sprites
+
+# Laad sprites eenmalig
+SPRITES    = load_sprites()
+USE_SPRITES = len(SPRITES) >= 2
+
+ALL_EMOJIS = ["🐷","🌈","🌟","🦋","🍭","🐸","🎀","🌸","🎠","🦄","🍀","🎪"]
+
+def render_card_face(card, size_px: int = 80) -> str:
+    """Geeft HTML terug voor de voorkant van een kaartje."""
+    if isinstance(card, dict) and card.get("b64"):
+        return (
+            f'<img src="{card["b64"]}" '
+            f'style="width:{size_px}px;height:{size_px}px;'
+            f'object-fit:contain;border-radius:8px;" '
+            f'alt="{card["label"]}">'
+        )
+    return str(card) if not isinstance(card, dict) else card.get("emoji", "⭐")
+
+# ════════════════════════════════════════════════════════════════════════════════
 # 1. INPUT SANITIZATION
 # ════════════════════════════════════════════════════════════════════════════════
 
-# Allowed characters: letters, digits, spaces, hyphens, apostrophes, and safe emoji.
 _NAME_PATTERN = re.compile(r"[^\w\s\-\'\.\!\?éèêëàâùûüôîïç]", re.UNICODE)
 _MAX_NAME_LEN = 20
 
 def sanitize_name(raw: str) -> str:
-    """Strip dangerous characters and enforce length limit."""
-    # Strip leading/trailing whitespace
     name = raw.strip()
-    # Remove any character that isn't a word char, space, or safe punctuation
     name = _NAME_PATTERN.sub("", name)
-    # Collapse multiple spaces
     name = re.sub(r"\s+", " ", name).strip()
-    # Enforce max length
     name = name[:_MAX_NAME_LEN]
-    # Fall back to anonymous if empty after cleaning
     return name or "Anonymous 🐷"
 
 
 # ════════════════════════════════════════════════════════════════════════════════
-# 2. SECURE SCORE STORAGE  (HMAC integrity check)
+# 2. SECURE SCORE STORAGE
 # ════════════════════════════════════════════════════════════════════════════════
 
 def _sign(payload: str) -> str:
-    """Return an HMAC-SHA256 hex digest of the payload."""
     return hmac.new(SECRET_KEY.encode(), payload.encode(), hashlib.sha256).hexdigest()
 
 def _scores_to_payload(scores: list) -> str:
-    """Deterministic JSON string used for signing."""
     return json.dumps(scores, sort_keys=True, separators=(",", ":"))
 
 def load_scores() -> list:
-    """Load and verify scores. Returns [] if file missing or tampered."""
     if not os.path.exists(SCORES_FILE):
         return []
     try:
@@ -76,12 +122,10 @@ def load_scores() -> list:
             data = json.load(f)
         stored_sig = data.get("sig", "")
         scores     = data.get("scores", [])
-        # Verify integrity
-        expected = _sign(_scores_to_payload(scores))
+        expected   = _sign(_scores_to_payload(scores))
         if not hmac.compare_digest(stored_sig, expected):
             st.warning("⚠️ Leaderboard file was modified externally and has been reset.")
             return []
-        # Validate each entry has expected keys and correct types
         validated = []
         for s in scores:
             if (
@@ -97,38 +141,26 @@ def load_scores() -> list:
         return []
 
 def save_score(name: str, difficulty: str, mode: str, moves: int, pairs: int, date: str):
-    """Append a new score, re-sign, and write atomically."""
     scores = load_scores()
-    scores.append({
-        "name":       name,
-        "difficulty": difficulty,
-        "mode":       mode,
-        "moves":      moves,
-        "pairs":      pairs,
-        "date":       date,
-    })
-    # Sort: Hard first, then Medium, then Easy; within each by fewest moves
+    scores.append({"name": name, "difficulty": difficulty, "mode": mode,
+                   "moves": moves, "pairs": pairs, "date": date})
     order = {"Hard": 0, "Medium": 1, "Easy": 2}
     scores.sort(key=lambda x: (order.get(x["difficulty"], 9), x["moves"]))
-    scores = scores[:MAX_SCORES]
-
+    scores  = scores[:MAX_SCORES]
     payload = _scores_to_payload(scores)
     sig     = _sign(payload)
     data    = {"scores": scores, "sig": sig}
-
-    # Atomic write via temp file
-    tmp = SCORES_FILE + ".tmp"
+    tmp     = SCORES_FILE + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     os.replace(tmp, SCORES_FILE)
 
 
 # ════════════════════════════════════════════════════════════════════════════════
-# 3. RATE LIMITING  (per browser session)
+# 3. RATE LIMITING
 # ════════════════════════════════════════════════════════════════════════════════
 
 def _can_save_score() -> bool:
-    """Return True if the session hasn't hit the save limit."""
     return st.session_state.get("saves_this_session", 0) < RATE_LIMIT
 
 def _record_save():
@@ -156,7 +188,7 @@ div.stButton > button:active { transform:scale(0.96); }
 .card-easy   { width:110px; height:110px; font-size:2.8rem; }
 .card-medium { width: 90px; height: 90px; font-size:2.2rem; }
 .card-hard   { width: 75px; height: 75px; font-size:1.8rem; }
-.card-base { border-radius:16px; display:flex; align-items:center; justify-content:center; }
+.card-base { border-radius:16px; display:flex; align-items:center; justify-content:center; overflow:hidden; }
 .matched-p1 { border:3px solid #86efac; background:linear-gradient(135deg,#d1fae5,#f0fdf4); box-shadow:0 4px 12px rgba(34,197,94,0.2); }
 .matched-p2 { border:3px solid #93c5fd; background:linear-gradient(135deg,#dbeafe,#eff6ff); box-shadow:0 4px 12px rgba(59,130,246,0.2); }
 .flipped    { border:3px solid #e91e8c; background:linear-gradient(135deg,#fce7f3,#fdf2f8); box-shadow:0 6px 18px rgba(233,30,140,0.3); }
@@ -186,6 +218,7 @@ div.stButton > button:active { transform:scale(0.96); }
 .lb-detail { font-size:0.8rem; opacity:0.75; }
 .lb-moves { font-size:1rem; font-weight:800; min-width:60px; text-align:right; }
 .peppa-sub { text-align:center; font-size:1rem; color:#be185d; margin-bottom:4px; }
+.asset-info { background:linear-gradient(135deg,#fef9c3,#fce7f3); border:2px solid #f59e0b; border-radius:16px; padding:10px 16px; text-align:center; font-size:0.9rem; color:#92400e; font-weight:700; margin-bottom:12px; }
 div[data-testid="stTextInput"] input {
     font-family:'Baloo 2',cursive !important; border-radius:14px !important;
     border:3px solid #f9a8d4 !important; background:#fdf2f8 !important;
@@ -195,7 +228,6 @@ div[data-testid="stTextInput"] input {
 """, unsafe_allow_html=True)
 
 # ── Game config ───────────────────────────────────────────────────────────────
-ALL_EMOJIS = ["🐷","🌈","🌟","🦋","🍭","🐸","🎀","🌸","🎠","🦄","🍀","🎪"]
 DIFF_CONFIG = {
     "Easy":   {"pairs":4,  "cols":4, "card_class":"card-easy",   "label":"4 pairs · 8 cards",   "emoji":"🌸", "color":"#22c55e"},
     "Medium": {"pairs":8,  "cols":4, "card_class":"card-medium", "label":"8 pairs · 16 cards",  "emoji":"🌟", "color":"#f59e0b"},
@@ -207,14 +239,24 @@ badge_map = {"Easy":"badge-easy","Medium":"badge-medium","Hard":"badge-hard"}
 def init_game():
     cfg   = DIFF_CONFIG[st.session_state.difficulty]
     n     = cfg["pairs"]
-    cards = ALL_EMOJIS[:n] * 2
-    random.shuffle(cards)
     total = n * 2
+
+    if USE_SPRITES:
+        # Herhaal pool als er meer paren nodig zijn dan sprites
+        repeats = math.ceil(n / len(SPRITES))
+        pool    = (SPRITES * repeats)[:n]
+        cards   = pool + pool
+        random.shuffle(cards)
+    else:
+        cards = ALL_EMOJIS[:n] * 2
+        random.shuffle(cards)
+
     st.session_state.update(dict(
         cards=cards, revealed=[False]*total, matched=[False]*total,
         matched_by=[None]*total, flipped=[], moves=0, matches=0,
         lock=False, current_player=1, score_p1=0, score_p2=0,
         game_ready=True, score_saved=False, winner_name="",
+        use_sprites=USE_SPRITES,
     ))
 
 def go_home():
@@ -244,12 +286,49 @@ def show_leaderboard(highlight_name=None):
         </div>""", unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
+# ── Card flip logic ───────────────────────────────────────────────────────────
+def flip_card(idx):
+    if st.session_state.lock or st.session_state.matched[idx] or st.session_state.revealed[idx] or idx in st.session_state.flipped:
+        return
+    st.session_state.revealed[idx] = True
+    st.session_state.flipped.append(idx)
+    if len(st.session_state.flipped) == 2:
+        st.session_state.moves += 1
+        i, j = st.session_state.flipped
+        ci, cj = st.session_state.cards[i], st.session_state.cards[j]
+
+        # Vergelijk op naam (sprite-dict) of direct (emoji string)
+        match = (
+            ci["name"] == cj["name"]
+            if isinstance(ci, dict) and isinstance(cj, dict)
+            else ci == cj
+        )
+
+        if match:
+            st.session_state.matched[i] = st.session_state.matched[j] = True
+            st.session_state.matched_by[i] = st.session_state.matched_by[j] = st.session_state.current_player
+            st.session_state.matches += 1
+            if st.session_state.mode == "two":
+                if st.session_state.current_player == 1: st.session_state.score_p1 += 1
+                else: st.session_state.score_p2 += 1
+            st.session_state.flipped = []
+        else:
+            st.session_state.lock = True
+
 # ─────────────────────────────────────────────────────────────────────────────
 # SCREEN 1 — Mode selection
 # ─────────────────────────────────────────────────────────────────────────────
 if "mode" not in st.session_state:
     st.markdown("# 🐷 Peppa's Memory Game")
     st.markdown('<p class="peppa-sub">Choose how you want to play! 🌟</p>', unsafe_allow_html=True)
+
+    # Toon asset status
+    if USE_SPRITES:
+        names = ", ".join(s["label"] for s in SPRITES)
+        st.markdown(f'<div class="asset-info">🖼️ {len(SPRITES)} sprite{"s" if len(SPRITES)>1 else ""} geladen: {names}</div>', unsafe_allow_html=True)
+    else:
+        st.markdown('<div class="asset-info">💡 Geen sprites gevonden in assets/ — emoji modus actief. Voeg PNG bestanden toe aan de assets/ map!</div>', unsafe_allow_html=True)
+
     st.markdown("<br>", unsafe_allow_html=True)
     col1, col2 = st.columns(2)
     with col1:
@@ -301,6 +380,10 @@ cols    = cfg["cols"]
 n_rows  = total // cols
 cclass  = cfg["card_class"]
 
+# Kaartgrootte per moeilijkheid
+SIZE_MAP = {"Easy": 90, "Medium": 72, "Hard": 58}
+img_size = SIZE_MAP.get(diff, 72)
+
 st.markdown("# 🐷 Peppa's Memory Game")
 mode_label = "👤 Single Player" if st.session_state.mode == "single" else "👥 2 Players"
 st.markdown(f'<p class="peppa-sub">{mode_label} &nbsp;·&nbsp;<span class="badge {badge_map[diff]}">{cfg["emoji"]} {diff}</span></p>', unsafe_allow_html=True)
@@ -335,7 +418,6 @@ if st.session_state.matches == n_pairs:
     st.balloons()
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # ── Name entry & rate-limited save ────────────────────────────────────────
     if not st.session_state.get("score_saved", False):
         if not _can_save_score():
             st.warning(f"⚠️ You've saved {RATE_LIMIT} scores this session. Refresh the page to save more.")
@@ -343,7 +425,7 @@ if st.session_state.matches == n_pairs:
             st.markdown(f'<div style="background:linear-gradient(135deg,#fef9c3,#fce7f3);border:2px solid #f59e0b;border-radius:20px;padding:16px;text-align:center;margin-bottom:12px"><div style="font-size:1.1rem;font-weight:800;color:#92400e">🏆 {winner_label} — enter your name for the Hall of Fame!</div></div>', unsafe_allow_html=True)
             name_input = st.text_input("", placeholder="Type your name here... 🌟", max_chars=_MAX_NAME_LEN, key="name_field", label_visibility="collapsed")
             if st.button("✅ Save my score!", use_container_width=True):
-                clean_name = sanitize_name(name_input)   # ← sanitized here
+                clean_name = sanitize_name(name_input)
                 save_score(
                     name=clean_name, difficulty=diff, mode=st.session_state.mode,
                     moves=st.session_state.moves, pairs=n_pairs,
@@ -370,45 +452,39 @@ if st.session_state.matches == n_pairs:
         if st.button("🏠 Main Menu", use_container_width=True): go_home(); st.rerun()
     st.stop()
 
-# ── Card flip logic ───────────────────────────────────────────────────────────
-def flip_card(idx):
-    if st.session_state.lock or st.session_state.matched[idx] or st.session_state.revealed[idx] or idx in st.session_state.flipped: return
-    st.session_state.revealed[idx] = True
-    st.session_state.flipped.append(idx)
-    if len(st.session_state.flipped) == 2:
-        st.session_state.moves += 1
-        i,j = st.session_state.flipped
-        if st.session_state.cards[i] == st.session_state.cards[j]:
-            st.session_state.matched[i] = st.session_state.matched[j] = True
-            st.session_state.matched_by[i] = st.session_state.matched_by[j] = st.session_state.current_player
-            st.session_state.matches += 1
-            if st.session_state.mode == "two":
-                if st.session_state.current_player == 1: st.session_state.score_p1 += 1
-                else: st.session_state.score_p2 += 1
-            st.session_state.flipped = []
-        else:
-            st.session_state.lock = True
-
 # ── Grid ──────────────────────────────────────────────────────────────────────
 grid_rows = [st.columns(cols) for _ in range(n_rows)]
 for i in range(total):
-    with grid_rows[i//cols][i%cols]:
+    with grid_rows[i // cols][i % cols]:
+        card = st.session_state.cards[i]
+
         if st.session_state.matched[i]:
-            mcl = "matched-p2" if st.session_state.matched_by[i]==2 else "matched-p1"
-            st.markdown(f'<div class="card-base {cclass} {mcl}">{st.session_state.cards[i]}</div>', unsafe_allow_html=True)
+            mcl  = "matched-p2" if st.session_state.matched_by[i] == 2 else "matched-p1"
+            face = render_card_face(card, img_size)
+            st.markdown(
+                f'<div class="card-base {cclass} {mcl}">{face}</div>',
+                unsafe_allow_html=True,
+            )
         elif st.session_state.revealed[i]:
-            st.markdown(f'<div class="card-base {cclass} flipped">{st.session_state.cards[i]}</div>', unsafe_allow_html=True)
+            face = render_card_face(card, img_size)
+            st.markdown(
+                f'<div class="card-base {cclass} flipped">{face}</div>',
+                unsafe_allow_html=True,
+            )
         else:
-            if st.button("🐷", key=f"card_{i}"): flip_card(i); st.rerun()
+            if st.button("🐷", key=f"card_{i}"):
+                flip_card(i)
+                st.rerun()
 
 # ── Unmatched pair — flip back, switch player ─────────────────────────────────
-if st.session_state.lock and len(st.session_state.flipped)==2:
+if st.session_state.lock and len(st.session_state.flipped) == 2:
     time.sleep(0.9)
-    i,j = st.session_state.flipped
+    i, j = st.session_state.flipped
     st.session_state.revealed[i] = st.session_state.revealed[j] = False
-    st.session_state.flipped = []; st.session_state.lock = False
-    if st.session_state.mode=="two":
-        st.session_state.current_player = 2 if st.session_state.current_player==1 else 1
+    st.session_state.flipped = []
+    st.session_state.lock = False
+    if st.session_state.mode == "two":
+        st.session_state.current_player = 2 if st.session_state.current_player == 1 else 1
     st.rerun()
 
 # ── Bottom nav ────────────────────────────────────────────────────────────────

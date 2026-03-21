@@ -8,3 +8,6 @@ peppa_scores.json.tmp
 dist/
 build/
 .DS_Store
+venv/
+assets/
+docs/
